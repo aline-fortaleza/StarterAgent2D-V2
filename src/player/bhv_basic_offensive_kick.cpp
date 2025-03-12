@@ -101,19 +101,18 @@ int countOpponentsInRegion(const WorldModel &wm, const Sector2D &region)
       \param opponent opponent being analyzed now
       \return distance from actual opponent to the pass line
     */
-double pointToLine(const WorldModel &wm, AbstractPlayerObject *player, const AbstractPlayerObject *opponent){
+double pointToLine(const WorldModel &wm, Vector2D& player, const AbstractPlayerObject *opponent){
     Vector2D ball_pos = wm.ball().pos();
-    Vector2D player_pos = player->pos();
     Vector2D opp_pos = opponent->pos();
 
     // Calcula a distância do oponente à linha que liga a bola ao jogador
-    double numerador = std::fabs((player_pos.y - ball_pos.y) * opp_pos.x
-                               - (player_pos.x - ball_pos.x) * opp_pos.y
-                               + player_pos.x * ball_pos.y
-                               - player_pos.y * ball_pos.x);
+    double numerador = std::fabs((player.y - ball_pos.y) * opp_pos.x
+                               - (player.x - ball_pos.x) * opp_pos.y
+                               + player.x * ball_pos.y
+                               - player.y * ball_pos.x);
 
-    double denominador = std::sqrt(std::pow(player_pos.y - ball_pos.y, 2)
-                                 + std::pow(player_pos.x - ball_pos.x, 2));
+    double denominador = std::sqrt(std::pow(player.y - ball_pos.y, 2)
+                                 + std::pow(player.x - ball_pos.x, 2));
 
     if (denominador == 0.0) return 0.0; // evita divisão por zero
 
@@ -128,7 +127,7 @@ double pointToLine(const WorldModel &wm, AbstractPlayerObject *player, const Abs
       \param player player being analyzed now
       \return distance from nearest opponent to the pass line
     */
-double Nearest_Opponent_Line(const WorldModel &wm, AbstractPlayerObject *player){
+double Nearest_Opponent_Line(const WorldModel &wm, Vector2D& player){
 
     Vector2D ball_pos = wm.ball().pos();
     int nearest_until_now = 30; // valor arbitrário 
@@ -154,7 +153,7 @@ double Nearest_Opponent_Line(const WorldModel &wm, AbstractPlayerObject *player)
       \param player player being analyzed now
       \return distance from nearest opponent to the player
     */
-double Nearest_Opponent (const WorldModel &wm, AbstractPlayerObject *player){
+double Nearest_Opponent (const WorldModel &wm, Vector2D& player){
     Vector2D ball_pos = wm.ball().pos();
     int nearest_until_now = 30; // valor arbitrário 
     for (int u = 1; u<=11; u++){
@@ -164,19 +163,18 @@ double Nearest_Opponent (const WorldModel &wm, AbstractPlayerObject *player){
         Vector2D opp_pos = opponent->pos();
         if (opp_pos.dist(ball_pos) > 30)
             continue;
-        if (opp_pos.dist(player->pos()) < nearest_until_now)
+        if (opp_pos.dist(player) < nearest_until_now)
         {
-            nearest_until_now = opp_pos.dist(player->pos());
+            nearest_until_now = opp_pos.dist(player);
         }
     }
     return nearest_until_now;
 }
 
-int Priority_pontuation (const WorldModel &wm, const Sector2D &region, PlayerAgent *agent, int Opponents_in_region, double nearest_opponent_line,  double nearest_opp_dist) {
+double Priority_pontuation (const WorldModel &wm, const Sector2D &region, PlayerAgent *agent, int Opponents_in_region, double nearest_opponent_line,  double nearest_opp_dist, Vector2D &player) {
     int qtd_opponents;
     Vector2D ball_pos = agent->world().ball().pos(); 
-    Vector2D player_pos = agent->world().self().pos();
-    int distance_to_ball = player_pos.dist(ball_pos);
+    int distance_to_ball = player.dist(ball_pos);
 
     double Pass_score = (20 - distance_to_ball*2.5) + (nearest_opponent_line*7) + (nearest_opp_dist*5.625) + (3 - Opponents_in_region)*3.25;
     
@@ -257,7 +255,7 @@ bool Bhv_BasicOffensiveKick::shoot(rcsc::PlayerAgent *agent)
 bool Bhv_BasicOffensiveKick::pass(PlayerAgent *agent, int kick_count)
 {
     const WorldModel &wm = agent->world();
-    std::vector<Vector2D> targets;
+    std::map<double, Vector2D, std::greater<int>> targets;
     Vector2D ball_pos = wm.ball().pos();
     for (int u = 1; u <= 11; u++)
     {
@@ -268,20 +266,33 @@ bool Bhv_BasicOffensiveKick::pass(PlayerAgent *agent, int kick_count)
         if (tm->pos().dist(ball_pos) > 30)
             continue;
         Sector2D pass = Sector2D(ball_pos, 1, tm_pos.dist(ball_pos) + 3, (tm_pos - ball_pos).th() - 15, (tm_pos - ball_pos).th() + 15);
-        // dlog.addSector(Logger ::PASS,pass, "FFFFFF");
-        if (!wm.existOpponentIn(pass, 5, true))
-        {
-            targets.push_back(tm_pos);
-        }
+
+        //parametros 
+        int d = countOpponentsInRegion(wm, pass);
+        double od = Nearest_Opponent_Line(wm, tm_pos);
+        double x = Nearest_Opponent(wm, tm_pos);
+
+        //calcula o score
+        double score = Priority_pontuation(wm, pass, agent, d, od, x, tm_pos);
+        
+        //targets.push_back({tm_pos, score})
+        targets.insert({score, tm_pos});
+
+
+
+        // if (!wm.existOpponentIn(pass, 5, true))
+        // {
+        //     targets.push_back(tm_pos);
+        // }
     }
     if (targets.size() == 0)
         return false; 
-    Vector2D best_target = targets[0];
-    for (unsigned int i = 1; i < targets.size(); i++)
-    {
-        if (targets[i].x > best_target.x)
-            best_target = targets[i];
-    }
+    Vector2D best_target = targets.begin()-> second;
+    // for (unsigned int i = 1; i < targets.size(); i++)
+    // {
+    //     if (targets[i].x > best_target.x)
+    //         best_target = targets[i];
+    // }
     if (wm.gameMode().type() != GameMode::PlayOn)
         Body_SmartKick(best_target, kick_count, 2.5, 1).execute(agent);
     else
