@@ -148,6 +148,12 @@ double Nearest_Opponent_Line(const WorldModel &wm, AbstractPlayerObject *player)
 
 }
 
+/*!
+      \brief Nearest Opponent Distance From player
+      \param wm WorldModel
+      \param player player being analyzed now
+      \return distance from nearest opponent to the player
+    */
 double Nearest_Opponent (const WorldModel &wm, AbstractPlayerObject *player){
     Vector2D ball_pos = wm.ball().pos();
     int nearest_until_now = 30; // valor arbitrário 
@@ -166,13 +172,15 @@ double Nearest_Opponent (const WorldModel &wm, AbstractPlayerObject *player){
     return nearest_until_now;
 }
 
-int Priority_pontuation (const WorldModel &wm, const Sector2D &region, PlayerAgent *agent, int Opponents_in_region, double nearest_opp_dist) {
+int Priority_pontuation (const WorldModel &wm, const Sector2D &region, PlayerAgent *agent, int Opponents_in_region, double nearest_opponent_line,  double nearest_opp_dist) {
     int qtd_opponents;
     Vector2D ball_pos = agent->world().ball().pos(); 
     Vector2D player_pos = agent->world().self().pos();
     int distance_to_ball = player_pos.dist(ball_pos);
-    int qtd_opponents = countOpponentsInRegion(wm, region);
 
+    double Pass_score = (20 - distance_to_ball*2.5) + (nearest_opponent_line*7) + (nearest_opp_dist*5.625) + (3 - Opponents_in_region)*3.25;
+    
+    return Pass_score;
 }
 
 /*-------------------------------------------------------------------*/
