@@ -84,6 +84,7 @@ main( int argc, char **argv )
         }
     }
 
+
     client = agent.createConsoleClient();
     agent.setClient( client );
 

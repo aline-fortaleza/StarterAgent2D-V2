@@ -42,6 +42,7 @@
 #include <rcsc/player/player_agent.h>
 #include <rcsc/player/debug_client.h>
 
+
 #include <rcsc/common/logger.h>
 #include <rcsc/common/server_param.h>
 
@@ -49,6 +50,130 @@
 
 #include <vector>
 using namespace rcsc;
+
+
+
+/*!
+      \brief check if a player is in the region
+      \param wm WorldModel
+      \param region usually the pass cone defined in the pass function
+      \return true or false
+    */
+bool Is_inRegion(const WorldModel &wm, const Sector2D &region, const AbstractPlayerObject *opponent) 
+{
+    if (region.contains(opponent->pos()))
+    {
+        return true;
+    }
+    return false;
+}
+
+/*!
+      \brief count how many players is in the region
+      \param wm WorldModel
+      \param region usually the pass cone defined in the pass function
+      \return number of players in the region
+    */
+int countOpponentsInRegion(const WorldModel &wm, const Sector2D &region) 
+{
+    Vector2D ball_pos = wm.ball().pos();
+    int count = 0;
+    for (int u = 1; u <= 11; u++)
+    {
+        const AbstractPlayerObject *tm = wm.theirPlayer(u);
+        if (tm == NULL || tm->unum() < 1 )
+            continue;
+        Vector2D tm_pos = tm->pos();
+        if (tm->pos().dist(ball_pos) > 30)
+            continue;
+        if (Is_inRegion(wm, region, tm))
+        {
+            count++;
+        }
+    }
+    return count;
+}
+
+/*!
+      \brief Distance from a player to the pass line
+      \param wm WorldModel
+      \param player player being analyzed now
+      \param opponent opponent being analyzed now
+      \return distance from actual opponent to the pass line
+    */
+double pointToLine(const WorldModel &wm, AbstractPlayerObject *player, const AbstractPlayerObject *opponent){
+    Vector2D ball_pos = wm.ball().pos();
+    Vector2D player_pos = player->pos();
+    Vector2D opp_pos = opponent->pos();
+
+    // Calcula a distância do oponente à linha que liga a bola ao jogador
+    double numerador = std::fabs((player_pos.y - ball_pos.y) * opp_pos.x
+                               - (player_pos.x - ball_pos.x) * opp_pos.y
+                               + player_pos.x * ball_pos.y
+                               - player_pos.y * ball_pos.x);
+
+    double denominador = std::sqrt(std::pow(player_pos.y - ball_pos.y, 2)
+                                 + std::pow(player_pos.x - ball_pos.x, 2));
+
+    if (denominador == 0.0) return 0.0; // evita divisão por zero
+
+    return numerador / denominador;
+    
+}
+
+
+/*!
+      \brief Nearest Opponent Distance From Pass Line
+      \param wm WorldModel
+      \param player player being analyzed now
+      \return distance from nearest opponent to the pass line
+    */
+double Nearest_Opponent_Line(const WorldModel &wm, AbstractPlayerObject *player){
+
+    Vector2D ball_pos = wm.ball().pos();
+    int nearest_until_now = 30; // valor arbitrário 
+    for (int u = 1; u<=11; u++){
+        const AbstractPlayerObject *opponent = wm.theirPlayer(u);
+        if (opponent == NULL || opponent->unum() < 1)
+            continue;
+        Vector2D opp_pos = opponent->pos();
+        if (opp_pos.dist(ball_pos) > 30)
+            continue;
+        if ( pointToLine(wm, player, opponent) < nearest_until_now)
+        {
+            nearest_until_now = pointToLine(wm, player, opponent);
+        }
+    }
+    return nearest_until_now;
+
+}
+
+double Nearest_Opponent (const WorldModel &wm, AbstractPlayerObject *player){
+    Vector2D ball_pos = wm.ball().pos();
+    int nearest_until_now = 30; // valor arbitrário 
+    for (int u = 1; u<=11; u++){
+        const AbstractPlayerObject *opponent = wm.theirPlayer(u);
+        if (opponent == NULL || opponent->unum() < 1)
+            continue;
+        Vector2D opp_pos = opponent->pos();
+        if (opp_pos.dist(ball_pos) > 30)
+            continue;
+        if (opp_pos.dist(player->pos()) < nearest_until_now)
+        {
+            nearest_until_now = opp_pos.dist(player->pos());
+        }
+    }
+    return nearest_until_now;
+}
+
+int Priority_pontuation (const WorldModel &wm, const Sector2D &region, PlayerAgent *agent, int Opponents_in_region, double nearest_opp_dist) {
+    int qtd_opponents;
+    Vector2D ball_pos = agent->world().ball().pos(); 
+    Vector2D player_pos = agent->world().self().pos();
+    int distance_to_ball = player_pos.dist(ball_pos);
+    int qtd_opponents = countOpponentsInRegion(wm, region);
+
+}
 
 /*-------------------------------------------------------------------*/
 /*!
@@ -96,7 +221,7 @@ bool Bhv_BasicOffensiveKick::execute(PlayerAgent *agent)
         Body_HoldBall().execute(agent);
         return true;
     }
-    clearball(agent);
+    clearball(agent); // chutar pra fora
     return true;
 }
 
@@ -135,13 +260,14 @@ bool Bhv_BasicOffensiveKick::pass(PlayerAgent *agent, int kick_count)
         if (tm->pos().dist(ball_pos) > 30)
             continue;
         Sector2D pass = Sector2D(ball_pos, 1, tm_pos.dist(ball_pos) + 3, (tm_pos - ball_pos).th() - 15, (tm_pos - ball_pos).th() + 15);
+        // dlog.addSector(Logger ::PASS,pass, "FFFFFF");
         if (!wm.existOpponentIn(pass, 5, true))
         {
             targets.push_back(tm_pos);
         }
     }
     if (targets.size() == 0)
-        return false;
+        return false; 
     Vector2D best_target = targets[0];
     for (unsigned int i = 1; i < targets.size(); i++)
     {
@@ -154,6 +280,7 @@ bool Bhv_BasicOffensiveKick::pass(PlayerAgent *agent, int kick_count)
         Body_SmartKick(best_target, kick_count, 2.5, 2).execute(agent);
     return true;
 }
+
 
 bool Bhv_BasicOffensiveKick::dribble(PlayerAgent *agent)
 {
